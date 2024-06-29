@@ -6,6 +6,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.StopWatch;
 
 import java.io.*;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * @author fangchenxin
@@ -35,33 +37,34 @@ public class ProcessUtils {
                 log.info(optName + "成功");
                 // 分批获取进程的正常输出
                 BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-                StringBuilder compileOutputStringBuilder = new StringBuilder();
+                List<String> outputList = new ArrayList<>();
                 String compileOutputLine;
                 // 逐行读取
                 while ((compileOutputLine = bufferedReader.readLine()) != null) {
-                    compileOutputStringBuilder.append(compileOutputLine).append("\n");
+                    outputList.add(compileOutputLine);
                 }
-                executeMessage.setMessage(optName + "成功信息：\n" + compileOutputStringBuilder);
+                executeMessage.setMessage(StrUtil.join( "\n", outputList));
             } else {
                 log.info(optName + "失败，错误码：" + exitValue);
                 // 分批获取进程的正常输出
                 BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-                StringBuilder compileOutputStringBuilder = new StringBuilder();
+                List<String> outputList = new ArrayList<>();
                 String compileOutputLine;
                 // 逐行读取
                 while ((compileOutputLine = bufferedReader.readLine()) != null) {
-                    compileOutputStringBuilder.append(compileOutputLine).append("\n");
+                    outputList.add(compileOutputLine);
                 }
-                executeMessage.setMessage(optName + "失败信息：\n" + compileOutputStringBuilder);
+                executeMessage.setMessage(StrUtil.join( "\n", outputList));
+
                 // 分批获取进程的错误输出
                 BufferedReader errorBufferedReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
-                StringBuilder errorCompileOutputStringBuilder = new StringBuilder();
+                List<String> errorOutputList = new ArrayList<>();
                 String errorCompileOutputLine;
                 // 逐行读取
                 while ((errorCompileOutputLine = errorBufferedReader.readLine()) != null) {
-                    errorCompileOutputStringBuilder.append(errorCompileOutputLine).append("\n");
+                    errorOutputList.add(errorCompileOutputLine);
                 }
-                executeMessage.setErrorMessage(optName + "错误信息：\n" + errorCompileOutputStringBuilder);
+                executeMessage.setErrorMessage(StrUtil.join( "\n", errorOutputList));
             }
             stopWatch.stop();
             executeMessage.setTime(stopWatch.getLastTaskTimeMillis());
