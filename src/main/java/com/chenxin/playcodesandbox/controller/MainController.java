@@ -1,6 +1,6 @@
 package com.chenxin.playcodesandbox.controller;
 
-import com.chenxin.playcodesandbox.JavaNativeCodeSandbox;
+import com.chenxin.playcodesandbox.service.template.JavaNativeCodeSandbox;
 import com.chenxin.playcodesandbox.model.ExecuteCodeRequest;
 import com.chenxin.playcodesandbox.model.ExecuteCodeResponse;
 import org.springframework.web.bind.annotation.*;

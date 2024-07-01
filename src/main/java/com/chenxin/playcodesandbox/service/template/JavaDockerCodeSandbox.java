@@ -1,15 +1,8 @@
-package com.chenxin.playcodesandbox;
+package com.chenxin.playcodesandbox.service.template;
 
-import cn.hutool.core.io.FileUtil;
-import cn.hutool.core.io.resource.ResourceUtil;
 import cn.hutool.core.util.ArrayUtil;
-import cn.hutool.core.util.StrUtil;
-import cn.hutool.dfa.WordTree;
-import com.chenxin.playcodesandbox.model.ExecuteCodeRequest;
-import com.chenxin.playcodesandbox.model.ExecuteCodeResponse;
 import com.chenxin.playcodesandbox.model.ExecuteMessage;
-import com.chenxin.playcodesandbox.model.JudgeInfo;
-import com.chenxin.playcodesandbox.utils.ProcessUtils;
+import com.chenxin.playcodesandbox.service.template.JavaCodeSandboxTemplate;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.*;
@@ -17,16 +10,14 @@ import com.github.dockerjava.api.model.*;
 import com.github.dockerjava.core.DockerClientBuilder;
 import com.github.dockerjava.core.command.ExecStartResultCallback;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
 import org.springframework.util.StopWatch;
 
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -35,21 +26,11 @@ import java.util.concurrent.TimeUnit;
  * @date 2024/6/18 15:42
  * @modify
  */
+@Component
 @Slf4j
-public class JavaDockerCodeSandboxOld implements CodeSandbox {
-
-    public static final String GLOBAL_CODE_DIR_NAME = "tmpCode";
-    public static final String GLOBAL_JAVA_CLASS_NAME = "Main.java";
+public class JavaDockerCodeSandbox extends JavaCodeSandboxTemplate {
 
     private static final long TIME_OUT = 5000L;
-
-    public static final List<String> blackList = Arrays.asList("Files", "exec");
-
-    private static final WordTree wordTree = new WordTree();
-
-    public static final String SECURITY_MANAGER_PATH = "/Users/fangchenxin/Desktop/yupi/code/OJ/play-code-sandbox/src/main/resources/security/";
-
-    public static final String SECURITY_MANAGER_CLASS_NAME = "MySecurityManager";
 
     /**
      * docker挂载宿主机路径
@@ -58,39 +39,8 @@ public class JavaDockerCodeSandboxOld implements CodeSandbox {
 
     public static final Boolean FIRST_INIT = true;
 
-    static {
-        // 初始化字典树
-        wordTree.addWords(blackList);
-    }
-
     @Override
-    public ExecuteCodeResponse executeCode(ExecuteCodeRequest executeCodeRequest) {
-        //System.setSecurityManager(new DefaultSecurityManager());
-        List<String> inputArgs = executeCodeRequest.getInputList();
-        String code = executeCodeRequest.getCode();
-        String language = executeCodeRequest.getLanguage();
-
-        String userDir = System.getProperty("user.dir");
-        String globalCodePathName = userDir + File.separator + GLOBAL_CODE_DIR_NAME;
-        // 判断全局代码路径是否存在
-        if (!FileUtil.exist(globalCodePathName)) {
-            FileUtil.mkdir(globalCodePathName);
-        }
-        // 把用户代码隔离存放
-        String userCodeParentPath = globalCodePathName + File.separator + UUID.randomUUID();
-        String userCodePath = userCodeParentPath + File.separator + GLOBAL_JAVA_CLASS_NAME;
-        File userCodeFile = FileUtil.writeString(code, userCodePath, StandardCharsets.UTF_8);
-
-        // 编译代码
-        String compileCmd = String.format("javac -encoding utf-8 %s", userCodeFile.getAbsolutePath());
-        try {
-            Process compileProcess = Runtime.getRuntime().exec(compileCmd);
-            ExecuteMessage executeMessage = ProcessUtils.getProcessInfo(compileProcess, "编译");
-            log.info(executeMessage.toString());
-        } catch (Exception e) {
-            return getErrorResponse(e);
-        }
-
+    public List<ExecuteMessage> runFile(File userCodeFile, List<String> inputArgs) {
         // 创建容器，把文件复制到容器内
         DockerClient dockerClient = DockerClientBuilder.getInstance().build();
         // 拉取镜像java
@@ -119,8 +69,7 @@ public class JavaDockerCodeSandboxOld implements CodeSandbox {
         hostConfig.withMemory(100 * 1000 * 1000L);
         hostConfig.withMemorySwap(0L);
         hostConfig.withCpuCount(1L);
-        //hostConfig.withSecurityOpts(Arrays.asList("seccomp=安全管理配置字符串"));
-        hostConfig.setBinds(new Bind(userCodeParentPath, new Volume(VOLUME_PATH)));
+        hostConfig.setBinds(new Bind(userCodeFile.getParentFile().getAbsolutePath(), new Volume(VOLUME_PATH)));
         CreateContainerResponse createContainerResponse = containerCmd
                 .withHostConfig(hostConfig)
                 .withNetworkDisabled(true)
@@ -229,72 +178,7 @@ public class JavaDockerCodeSandboxOld implements CodeSandbox {
                 throw new RuntimeException(e);
             }
         }
-
-        // 整理输出
-        ExecuteCodeResponse executeCodeResponse = new ExecuteCodeResponse();
-        List<String> outputList = new ArrayList<>();
-        // 取用时最大值
-        long maxTime = 0;
-        for (ExecuteMessage executeMessage : executeMessageList) {
-            String errorMessage = executeMessage.getErrorMessage();
-            if (StrUtil.isNotBlank(errorMessage)) {
-                executeCodeResponse.setMessage(errorMessage);
-                // todo
-                executeCodeResponse.setStatus(3);
-                break;
-            }
-            outputList.add(executeMessage.getMessage());
-            Long time = executeMessage.getTime();
-            if (time != null) {
-                maxTime = Math.max(maxTime, time);
-            }
-        }
-        // 正常运行完成
-        if (outputList.size() == executeMessageList.size()) {
-            executeCodeResponse.setStatus(1);
-        }
-        executeCodeResponse.setOutputList(outputList);
-        JudgeInfo judgeInfo = new JudgeInfo();
-        judgeInfo.setTime(maxTime);
-        // todo
-        judgeInfo.setMemory(1L);
-        executeCodeResponse.setJudgeInfo(judgeInfo);
-
-        // 文件处理
-        if (userCodeFile.getParentFile() != null) {
-            boolean del = FileUtil.del(userCodeParentPath);
-            log.info("删除" + (del ? "成功" : "失败"));
-        }
-
-        return executeCodeResponse;
+        return executeMessageList;
     }
 
-    /**
-     * @param e
-     * @return com.chenxin.playcodesandbox.model.ExecuteCodeResponse
-     * @description 获取错误响应
-     * @author fangchenxin
-     * @date 2024/6/18 23:44
-     */
-    public ExecuteCodeResponse getErrorResponse(Throwable e) {
-        ExecuteCodeResponse executeCodeResponse = new ExecuteCodeResponse();
-        executeCodeResponse.setOutputList(new ArrayList<>());
-        executeCodeResponse.setMessage(e.getMessage());
-        // 代码沙箱执行错误
-        executeCodeResponse.setStatus(2);
-        executeCodeResponse.setJudgeInfo(new JudgeInfo());
-        return executeCodeResponse;
-    }
-
-    public static void main(String[] args) throws InterruptedException {
-        JavaDockerCodeSandboxOld javaNativeCodeSandbox = new JavaDockerCodeSandboxOld();
-        ExecuteCodeRequest executeCodeRequest = new ExecuteCodeRequest();
-        executeCodeRequest.setInputList(Arrays.asList("1 2", "3 4"));
-        //String code = ResourceUtil.readStr("testcode/unsafeCode/RunFileError.java", StandardCharsets.UTF_8);
-        String code = ResourceUtil.readStr("testcode/simplecomputeargs/Main.java", StandardCharsets.UTF_8);
-        executeCodeRequest.setCode(code);
-        executeCodeRequest.setLanguage("java");
-        ExecuteCodeResponse executeCodeResponse = javaNativeCodeSandbox.executeCode(executeCodeRequest);
-        log.info(executeCodeResponse.toString());
-    }
 }

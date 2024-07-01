@@ -1,10 +1,9 @@
-package com.chenxin.playcodesandbox;
+package com.chenxin.playcodesandbox.service.template;
 
 import com.chenxin.playcodesandbox.model.ExecuteCodeRequest;
 import com.chenxin.playcodesandbox.model.ExecuteCodeResponse;
+import com.chenxin.playcodesandbox.service.template.JavaCodeSandboxTemplate;
 import org.springframework.stereotype.Component;
-
-import java.io.File;
 
 /**
  * @author fangchenxin
