@@ -47,6 +47,13 @@ public abstract class JavaCodeSandboxTemplate implements CodeSandbox {
         String userCodeParentPath = globalCodePathName + File.separator + UUID.randomUUID();
         String userCodePath = userCodeParentPath + File.separator + GLOBAL_JAVA_CLASS_NAME;
         File userCodeFile = FileUtil.writeString(code, userCodePath, StandardCharsets.UTF_8);
+        // 给文件赋权
+        ProcessBuilder processBuilder = new ProcessBuilder("chmod", "777", userCodePath);
+        try {
+            processBuilder.start().waitFor();
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
         return userCodeFile;
     }
 
@@ -59,6 +66,7 @@ public abstract class JavaCodeSandboxTemplate implements CodeSandbox {
      */
     public ExecuteMessage compileFile(File userCodeFile) {
         String compileCmd = String.format("javac -encoding utf-8 %s", userCodeFile.getAbsolutePath());
+        log.info("编译命令：" + compileCmd);
         try {
             Process compileProcess = Runtime.getRuntime().exec(compileCmd);
             ExecuteMessage executeMessage = ProcessUtils.getProcessInfo(compileProcess, "编译");
