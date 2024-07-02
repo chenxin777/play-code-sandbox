@@ -2,6 +2,7 @@ package com.chenxin.playcodesandbox.service.template;
 
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
+import com.chenxin.playcodesandbox.constant.ExecCodeStatus;
 import com.chenxin.playcodesandbox.model.ExecuteCodeRequest;
 import com.chenxin.playcodesandbox.model.ExecuteCodeResponse;
 import com.chenxin.playcodesandbox.model.ExecuteMessage;
@@ -52,7 +53,7 @@ public abstract class JavaCodeSandboxTemplate implements CodeSandbox {
         try {
             processBuilder.start().waitFor();
         } catch (Exception ex) {
-            throw new RuntimeException(ex);
+            throw new RuntimeException("文件赋权异常", ex);
         }
         return userCodeFile;
     }
@@ -74,9 +75,8 @@ public abstract class JavaCodeSandboxTemplate implements CodeSandbox {
                 throw new RuntimeException("编译错误");
             }
             return executeMessage;
-        } catch (Exception e) {
-            //return getErrorResponse(e);
-            throw new RuntimeException(e);
+        } catch (Exception ex) {
+            throw new RuntimeException("编译代码异常", ex);
         }
     }
 
@@ -111,9 +111,8 @@ public abstract class JavaCodeSandboxTemplate implements CodeSandbox {
                 ExecuteMessage executeMessage = ProcessUtils.getProcessInfo(runProcess, "运行");
                 executeMessageList.add(executeMessage);
                 log.info(executeMessage.toString());
-
             } catch (Exception e) {
-                throw new RuntimeException("执行错误", e);
+                throw new RuntimeException("代码执行错误", e);
             }
         }
         return executeMessageList;
@@ -135,8 +134,7 @@ public abstract class JavaCodeSandboxTemplate implements CodeSandbox {
             String errorMessage = executeMessage.getErrorMessage();
             if (StrUtil.isNotBlank(errorMessage)) {
                 executeCodeResponse.setMessage(errorMessage);
-                // todo
-                executeCodeResponse.setStatus(3);
+                executeCodeResponse.setStatus(ExecCodeStatus.ERROR.getCode());
                 break;
             }
             outputList.add(executeMessage.getMessage());
@@ -147,7 +145,7 @@ public abstract class JavaCodeSandboxTemplate implements CodeSandbox {
         }
         // 正常运行完成
         if (outputList.size() == executeMessageList.size()) {
-            executeCodeResponse.setStatus(1);
+            executeCodeResponse.setStatus(ExecCodeStatus.SUCCESS.getCode());
         }
         executeCodeResponse.setOutputList(outputList);
         JudgeInfo judgeInfo = new JudgeInfo();
@@ -182,41 +180,45 @@ public abstract class JavaCodeSandboxTemplate implements CodeSandbox {
      * @author fangchenxin
      * @date 2024/6/18 23:44
      */
-    public ExecuteCodeResponse getErrorResponse(Throwable e) {
+    public static ExecuteCodeResponse getErrorResponse(Throwable e) {
         ExecuteCodeResponse executeCodeResponse = new ExecuteCodeResponse();
         executeCodeResponse.setOutputList(new ArrayList<>());
         executeCodeResponse.setMessage(e.getMessage());
         // 代码沙箱执行错误
-        executeCodeResponse.setStatus(2);
+        executeCodeResponse.setStatus(ExecCodeStatus.ERROR.getCode());
         executeCodeResponse.setJudgeInfo(new JudgeInfo());
         return executeCodeResponse;
     }
 
     @Override
     public ExecuteCodeResponse executeCode(ExecuteCodeRequest executeCodeRequest) {
+        new ExecuteCodeResponse();
+        ExecuteCodeResponse outputResponse;
+        try {
+            List<String> inputArgs = executeCodeRequest.getInputList();
+            String code = executeCodeRequest.getCode();
 
-        List<String> inputArgs = executeCodeRequest.getInputList();
-        String code = executeCodeRequest.getCode();
+            // 把用户代码保存为文件
+            File userCodeFile = saveCodeToFile(code);
 
-        // 把用户代码保存为文件
-        File userCodeFile = saveCodeToFile(code);
+            // 编译代码
+            ExecuteMessage comileFileExecuteMessage = compileFile(userCodeFile);
+            log.info("编译结果：" + comileFileExecuteMessage);
 
-        // 编译代码
-        ExecuteMessage comileFileExecuteMessage = compileFile(userCodeFile);
-        log.info("编译结果：" + comileFileExecuteMessage);
+            // 执行文件
+            List<ExecuteMessage> executeMessageList = runFile(userCodeFile, inputArgs);
 
-        // 执行文件
-        List<ExecuteMessage> executeMessageList = runFile(userCodeFile, inputArgs);
+            // 输出结果
+            outputResponse = getOutputResponse(executeMessageList);
 
-        // 输出结果
-        ExecuteCodeResponse outputResponse = getOutputResponse(executeMessageList);
-
-        // 删除文件
-        boolean res = deleteFile(userCodeFile);
-        if (!res) {
-            log.error("deleteFile error, user");
+            // 删除文件
+            boolean res = deleteFile(userCodeFile);
+            if (!res) {
+                log.error("deleteFile error, user");
+            }
+        } catch (Exception ex) {
+            outputResponse = getErrorResponse(ex);
         }
-
         return outputResponse;
     }
 

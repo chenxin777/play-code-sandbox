@@ -45,7 +45,7 @@ public class ProcessUtils {
                 }
                 executeMessage.setMessage(StrUtil.join( "\n", outputList));
             } else {
-                log.info(optName + "失败，错误码：" + exitValue);
+                log.error(optName + "失败，错误码：" + exitValue);
                 // 分批获取进程的正常输出
                 BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
                 List<String> outputList = new ArrayList<>();
@@ -69,7 +69,7 @@ public class ProcessUtils {
             stopWatch.stop();
             executeMessage.setTime(stopWatch.getLastTaskTimeMillis());
         } catch (Exception ex) {
-            throw new RuntimeException(ex);
+            throw new RuntimeException("执行进程异常", ex);
         }
         return executeMessage;
 
@@ -111,7 +111,7 @@ public class ProcessUtils {
             inputStream.close();
             process.destroy();
         } catch (Exception ex) {
-            throw new RuntimeException(ex);
+            throw new RuntimeException("交互式进程异常", ex);
         }
         return executeMessage;
 
